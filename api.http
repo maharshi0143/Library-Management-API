@@ -1,0 +1,109 @@
+
+### Health
+GET http://localhost:3000/health
+
+# BOOKS — FULL CRUD
+
+### Create a book
+POST http://localhost:3000/api/books
+Content-Type: application/json
+
+{
+  "title": "Clean Code",
+  "author": "Robert C. Martin",
+  "isbn": "9780132350884"
+}
+
+### List all books
+GET http://localhost:3000/api/books
+
+### Get a book by ID
+GET http://localhost:3000/api/books/1
+
+### Update a book
+PUT http://localhost:3000/api/books/1
+Content-Type: application/json
+
+{
+  "title": "Clean Code (2nd Edition)",
+  "author": "Robert C. Martin",
+  "isbn": "9780132350884"
+}
+
+### Delete a book
+DELETE http://localhost:3000/api/books/1
+
+### List all AVAILABLE books
+GET http://localhost:3000/api/books/available
+
+
+# MEMBERS — FULL CRUD
+
+### Create a member
+POST http://localhost:3000/api/members
+Content-Type: application/json
+
+{
+  "name": "Alice",
+  "email": "alice@example.com"
+}
+
+### List all members
+GET http://localhost:3000/api/members
+
+### Get member by ID
+GET http://localhost:3000/api/members/1
+
+### Update a member
+PUT http://localhost:3000/api/members/1
+Content-Type: application/json
+
+{
+  "name": "Alice Wonderland",
+  "email": "alice@example.com"
+}
+
+### Delete a member
+DELETE http://localhost:3000/api/members/1
+
+### Get books currently borrowed by a member
+GET http://localhost:3000/api/members/1/borrowed
+
+
+# TRANSACTIONS — BORROW / RETURN / OVERDUE
+
+### Borrow a book
+POST http://localhost:3000/api/transactions/borrow
+Content-Type: application/json
+
+{
+  "memberId": 1,
+  "bookId": 1
+}
+
+### Return a book (transaction ID)
+POST http://localhost:3000/api/transactions/1/return
+Content-Type: application/json
+
+{}
+
+### List overdue transactions
+GET http://localhost:3000/api/transactions/overdue
+
+
+# FINES
+
+### List all fines
+GET http://localhost:3000/api/fines
+
+### Get fine by ID
+GET http://localhost:3000/api/fines/1
+
+### List fines for a member
+GET http://localhost:3000/api/members/1/fines
+
+### Pay a fine
+POST http://localhost:3000/api/fines/1/pay
+Content-Type: application/json
+
+{}
