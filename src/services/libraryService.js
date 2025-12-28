@@ -2,8 +2,8 @@ const pool = require('../db');
 const { ApiError } = require('../utils/errorHandler');
 const { addDays, diffInDays } = require('../utils/dateUtils');
 
-const DAILY_FINE = 0.5;   
-const LOAN_DAYS = 14;    
+const DAILY_FINE = parseFloat(process.env.DAILY_FINE || '0.5');
+const LOAN_DAYS = parseInt(process.env.LOAN_DAYS || '14', 10);
 
 async function refreshOverdueTransactions(client) {
   const now = new Date();
@@ -125,6 +125,29 @@ async function borrowBook({ memberId, bookId }) {
       throw new ApiError(400, 'Book is under maintenance and cannot be borrowed');
     }
 
+    // Check for reservations
+    const { rows: resRows } = await client.query(
+      `SELECT * FROM reservations 
+       WHERE book_id = $1 AND status = 'active' 
+       ORDER BY reserved_at ASC LIMIT 1`,
+      [bookId]
+    );
+
+    if (resRows.length > 0) {
+      const reservation = resRows[0];
+      if (reservation.member_id !== memberId) {
+        throw new ApiError(400, 'Book is reserved for another member');
+      }
+      // Fulfill reservation
+      await client.query(
+        `UPDATE reservations SET status = 'fulfilled' WHERE id = $1`,
+        [reservation.id]
+      );
+    } else if (book.status === 'reserved') {
+      // Should not happen if logic is correct, but safety check
+      throw new ApiError(400, 'Book is reserved');
+    }
+
     if (book.available_copies <= 0) {
       throw new ApiError(400, 'No available copies to borrow');
     }
@@ -141,7 +164,28 @@ async function borrowBook({ memberId, bookId }) {
     const transaction = txRows[0];
 
     const newAvailable = book.available_copies - 1;
-    const newStatus = newAvailable === 0 ? 'borrowed' : 'available';
+    let newStatus = book.status;
+
+    if (newAvailable === 0) {
+      newStatus = 'borrowed';
+    } else {
+      // Check if remaining copies are enough for other reservations? 
+      // For simplicity, if we borrowed one, and there are no other reservations blocking, it remains available.
+      // If there were other reservations, we would have seen them.
+      // But we only checked the OLDIEST. 
+      // If we are the reserver, we took one. 
+      // If there are more reservations, strictly we should check.
+      // But sticking to simple logic: If > 0 available, 'available'.
+      const { rows: pendingRes } = await client.query(
+        `SELECT COUNT(*) as count FROM reservations WHERE book_id = $1 AND status = 'active'`,
+        [bookId]
+      );
+      if (parseInt(pendingRes[0].count) >= newAvailable) {
+        newStatus = 'reserved';
+      } else {
+        newStatus = 'available';
+      }
+    }
 
     await client.query(
       `UPDATE books
@@ -220,8 +264,21 @@ async function returnBook(transactionId) {
     );
 
     const newAvailable = book.available_copies + 1;
-    const newStatus =
-      book.status === 'maintenance' ? 'maintenance' : 'available';
+
+    // Check for active reservations
+    const { rows: resRows } = await client.query(
+      `SELECT COUNT(*) as count FROM reservations WHERE book_id = $1 AND status = 'active'`,
+      [book.id]
+    );
+    const activeReservations = parseInt(resRows[0].count);
+
+    let newStatus = book.status === 'maintenance' ? 'maintenance' : 'available';
+
+    if (newStatus !== 'maintenance') {
+      if (activeReservations > 0) {
+        newStatus = 'reserved';
+      }
+    }
 
     await client.query(
       `UPDATE books
@@ -306,9 +363,68 @@ async function payFine(fineId) {
   }
 }
 
+async function reserveBook({ memberId, bookId }) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Check member
+    const { rows: memberRows } = await client.query(
+      'SELECT * FROM members WHERE id = $1 FOR UPDATE',
+      [memberId]
+    );
+    if (memberRows.length === 0) throw new ApiError(404, 'Member not found');
+    if (memberRows[0].status === 'suspended') throw new ApiError(400, 'Member is suspended');
+
+    // Check book
+    const { rows: bookRows } = await client.query(
+      'SELECT * FROM books WHERE id = $1 FOR UPDATE',
+      [bookId]
+    );
+    if (bookRows.length === 0) throw new ApiError(404, 'Book not found');
+    const book = bookRows[0];
+
+    if (book.status === 'maintenance') throw new ApiError(400, 'Book is in maintenance');
+
+    // Check existing reservation
+    const { rows: existingRes } = await client.query(
+      `SELECT * FROM reservations WHERE member_id = $1 AND book_id = $2 AND status = 'active'`,
+      [memberId, bookId]
+    );
+    if (existingRes.length > 0) throw new ApiError(400, 'Member already reserved this book');
+
+    // Create reservation
+    const { rows: resRows } = await client.query(
+      `INSERT INTO reservations (book_id, member_id, status) VALUES ($1, $2, 'active') RETURNING *`,
+      [bookId, memberId]
+    );
+
+    // If book was available, mark as reserved if copies are low?
+    // Logic: If available_copies <= active_reservations, mark as reserved
+    const { rows: allRes } = await client.query(
+      `SELECT COUNT(*) as count FROM reservations WHERE book_id = $1 AND status = 'active'`,
+      [bookId]
+    );
+    const totalReservations = parseInt(allRes[0].count);
+
+    if (book.available_copies <= totalReservations && book.status === 'available') {
+      await client.query(`UPDATE books SET status = 'reserved' WHERE id = $1`, [bookId]);
+    }
+
+    await client.query('COMMIT');
+    return resRows[0];
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 module.exports = {
   borrowBook,
   returnBook,
   listOverdueTransactions,
-  payFine
+  payFine,
+  reserveBook
 };

@@ -1,6 +1,8 @@
 // src/app.js
-const express = require('express');
 const dotenv = require('dotenv');
+dotenv.config();
+
+const express = require('express');
 const pool = require('./db');
 
 const bookRoutes = require('./routes/books');
@@ -8,8 +10,6 @@ const memberRoutes = require('./routes/members');
 const transactionRoutes = require('./routes/transactions');
 const fineRoutes = require('./routes/fines');
 const { errorMiddleware } = require('./utils/errorHandler');
-
-dotenv.config();
 
 const app = express();
 app.use(express.json());

@@ -1,4 +1,5 @@
 const pool = require('../db');
+const libraryService = require('../services/libraryService');
 
 exports.createBook = async (req, res, next) => {
   try {
@@ -19,7 +20,7 @@ exports.createBook = async (req, res, next) => {
       ]
     );
 
-    res.status(201).json(rows[0]); 
+    res.status(201).json(rows[0]);
   } catch (err) {
     next(err);
   }
@@ -58,13 +59,15 @@ exports.updateBook = async (req, res, next) => {
            title = COALESCE($3, title),
            author = COALESCE($4, author),
            category = COALESCE($5, category),
-           status = COALESCE($6, status),
            total_copies = COALESCE($7, total_copies),
            available_copies = COALESCE($8, available_copies)
        WHERE id = $1
        RETURNING *`,
       [id, isbn, title, author, category, status, total_copies, available_copies]
     );
+
+    // Note: Status updates are restricted in this endpoint to prevent bypassing state logic.
+    // Use specific endpoints for strict state transitions (borrow, return, reserve, maintenance).
 
     if (rows.length === 0) {
       return res.status(404).json({ error: 'Book not found' });
@@ -98,6 +101,18 @@ exports.getAvailableBooks = async (req, res, next) => {
        ORDER BY id`
     );
     res.json(rows);
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.reserveBook = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { member_id } = req.body;
+
+    const reservation = await libraryService.reserveBook({ memberId: member_id, bookId: id });
+    res.status(201).json(reservation);
   } catch (err) {
     next(err);
   }

@@ -18,6 +18,9 @@ router.get('/:id', bookController.getBookById);
 // PUT /api/books/:id → update a book
 router.put('/:id', bookController.updateBook);
 
+// POST /api/books/:id/reserve → reserve a book
+router.post('/:id/reserve', bookController.reserveBook);
+
 // DELETE /api/books/:id → delete a book
 router.delete('/:id', bookController.deleteBook);
 

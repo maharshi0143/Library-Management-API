@@ -174,7 +174,11 @@ DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=library_db
 DB_USER=postgres
-DB_PASSWORD=maharshi
+DB_NAME=library_db
+DB_USER=postgres
+DB_PASSWORD=your_password
+DAILY_FINE=0.5
+LOAN_DAYS=14
 ```
 
 
@@ -789,7 +793,24 @@ Processes a book return and calculates fines if overdue.
 
 ---
 
-### 15. Get Overdue Transactions
+### 15. Reserve Book
+
+Reserves a book for a member.
+
+**Endpoint:** `POST /api/books/:id/reserve`
+
+**Request Body:**
+```json
+{
+  "member_id": 1
+}
+```
+
+**Response:** `201 Created`
+
+---
+
+### 16. Get Overdue Transactions
 
 Retrieves all overdue transactions.
 
